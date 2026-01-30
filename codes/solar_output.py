@@ -2,7 +2,7 @@ import csv
 import solar_geometry
 
 
-latitude = 1.3
+latitude = 23
 longitude = 0
 
 time_step = 300          # 每5分钟采样
@@ -12,7 +12,7 @@ total_time = total_days * 24 * 3600
 
 # ===== 写CSV =====
 
-with open("solar_angles_singapore_2days.csv", "w", newline="") as f:
+with open("solar_angles_northbackline_2days_after180days.csv", "w", newline="") as f:
 
     writer = csv.writer(f)
 
@@ -24,7 +24,7 @@ with open("solar_angles_singapore_2days.csv", "w", newline="") as f:
         "is_daylight"
     ])
 
-    for t in range(0, total_time, time_step):
+    for t in range(180*24*3600, 180*24*3600+total_time, time_step):
 
         beta = solar_geometry.solar_incidence_angle(latitude, longitude, t)
 

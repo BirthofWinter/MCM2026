@@ -5,7 +5,7 @@ import numpy as np
 R_EARTH = 6371000
 TILT = np.radians(23.26)
 
-Trot = 24*3600
+Trot = 24*3600 - 56
 Torb = 365*24*3600
 
 a = 1.496e11
