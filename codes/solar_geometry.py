@@ -1,52 +1,97 @@
 import numpy as np
 
-
-np.set_printoptions(suppress=True, precision=4)
 # ===== 常量 =====
 
-R_EARTH = 6371000        # m 地球半径
-D_SUN = 1.496e11         # m 地日距离
-TILT = np.radians(23.26) # 黄赤交角
-YITA = np.radians(13.26) # 冬至远日夹角
-Trot = 24*3600 # 地球自转周期
-Torb = 365*24*3600 # 地球公转周期
+R_EARTH = 6371000
+TILT = np.radians(23.26)
 
-OMEGA = 2*np.pi / (Trot)  # 自转角速度
+Trot = 24*3600
+Torb = 365*24*3600
+
+a = 1.496e11
+e = 0.0167
 
 
-# ===== 模型函数 =====
+# ===== 开普勒 =====
 
-def reference_point_position(
-    latitude_deg,   # 纬度
-    longitude_deg,  # 经度
-    time_seconds,   # 经过时间
-    earth_radius=R_EARTH,
-    sun_distance=D_SUN,
-    tilt=TILT,
-    yita=YITA,
-    Trot=Trot,
-    Torb=Torb,
+def solve_kepler(M, e):
+    E = M
+    for _ in range(50):
+        E = E - (E - e*np.sin(E) - M)/(1 - e*np.cos(E))
+    return E
+
+
+# ===== 主函数：返回入射角 =====
+
+def solar_incidence_angle(
+    latitude_deg,
+    longitude_deg,
+    time_seconds
 ):
-    """
-    返回参考点在日心坐标系中的坐标
-    """
 
-    r_x=earth_radius * (np.cos(longitude_deg) * np.cos(latitude_deg) * np.cos(tilt)+ np.sin(latitude_deg)*np.sin(tilt))
-    r_y=earth_radius * np.sin(longitude_deg) * np.sin(latitude_deg)
-    r_z=earth_radius * (- np.cos(longitude_deg)*np.cos(latitude_deg)*np.sin(tilt)+np.sin(latitude_deg)*np.cos(tilt))
+    φ = np.radians(latitude_deg)
 
-    R_x=sun_distance*np.cos(theta)
-    R_y=sun_distance*np.sin(theta)
-    R_z=0
-    
-    return np.array([X, Y, Z])
+    # ---------- 自转 ----------
+    λ = np.radians(longitude_deg) + 2*np.pi*time_seconds/Trot
 
+    # ---------- 公转 ----------
+    M = 2*np.pi*time_seconds/Torb
+    k = solve_kepler(M, e)
 
-for h in [0,6,12,18]:
-    pos = reference_point_position(40, 60 ,h*3600)
-    print(
-        f"{h:2d}h  "
-        f"X={pos[0]:.0f}  "
-        f"Y={pos[1]:.0f}  "
-        f"Z={pos[2]:.0f}"
+    R_dist = a*(1 - e*np.cos(k))
+
+    theta = 2*np.arctan2(
+        np.sqrt(1+e)*np.sin(k/2),
+        np.sqrt(1-e)*np.cos(k/2)
     )
+
+    # ---------- r 向量 ----------
+    r = np.array([
+        R_EARTH*(np.cos(λ)*np.cos(φ)*np.cos(TILT)
+                 + np.sin(φ)*np.sin(TILT)),
+
+        R_EARTH*(np.sin(λ)*np.cos(φ)),
+
+        R_EARTH*(-np.cos(λ)*np.cos(φ)*np.sin(TILT)
+                 + np.sin(φ)*np.cos(TILT))
+    ])
+
+    # ---------- R 向量 ----------
+    R_vec = np.array([
+        R_dist*np.cos(theta),
+        R_dist*np.sin(theta),
+        0
+    ])
+
+    # ---------- 入射角 ----------
+    numerator = -np.dot(r, r + R_vec)
+    denominator = np.linalg.norm(r) * np.linalg.norm(r + R_vec)
+
+    cos_beta = numerator / denominator
+
+    # 数值安全
+    cos_beta = np.clip(cos_beta, -1, 1)
+
+    beta = np.degrees(np.arccos(cos_beta))
+
+    return beta
+
+hours=[0,6,12,18,24,30,36,42,48]
+seconds=[1800,1860,1920,1980]
+days=[10,30,60,90,180,270]
+
+for s in seconds:
+    angle = solar_incidence_angle(0, 0, s)
+    print(f"{s}seconds → 入射角 = {angle:.2f}°")
+    
+
+for h in hours:
+    angle = solar_incidence_angle(0, 0, h*3600)
+    print(f"{h}hours → 入射角 = {angle:.2f}°")
+    
+    
+for d in days:
+    angle = solar_incidence_angle(0, 0, d*24*3600)
+    print(f"{d}days → 入射角 = {angle:.2f}°")
+    
+    
