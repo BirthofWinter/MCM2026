@@ -4,49 +4,46 @@ import numpy as np
 np.set_printoptions(suppress=True, precision=4)
 # ===== 常量 =====
 
-R_EARTH = 6371000        # m
-D_SUN = 1.496e11         # m
-TILT = np.radians(23.44) # 黄赤交角
+R_EARTH = 6371000        # m 地球半径
+D_SUN = 1.496e11         # m 地日距离
+TILT = np.radians(23.26) # 黄赤交角
+YITA = np.radians(13.26) # 冬至远日夹角
+Trot = 24*3600 # 地球自转周期
+Torb = 365*24*3600 # 地球公转周期
 
-OMEGA = 2*np.pi / (24*3600)  # 自转角速度
+OMEGA = 2*np.pi / (Trot)  # 自转角速度
 
 
 # ===== 模型函数 =====
 
 def reference_point_position(
-    latitude_deg,
-    time_seconds,
+    latitude_deg,   # 纬度
+    longitude_deg,  # 经度
+    time_seconds,   # 经过时间
     earth_radius=R_EARTH,
     sun_distance=D_SUN,
-    tilt=TILT
+    tilt=TILT,
+    yita=YITA,
+    Trot=Trot,
+    Torb=Torb,
 ):
     """
     返回参考点在日心坐标系中的坐标
     """
 
-    φ = np.radians(latitude_deg)
-    θ = OMEGA * time_seconds
+    r_x=earth_radius * (np.cos(longitude_deg) * np.cos(latitude_deg) * np.cos(tilt)+ np.sin(latitude_deg)*np.sin(tilt))
+    r_y=earth_radius * np.sin(longitude_deg) * np.sin(latitude_deg)
+    r_z=earth_radius * (- np.cos(longitude_deg)*np.cos(latitude_deg)*np.sin(tilt)+np.sin(latitude_deg)*np.cos(tilt))
 
-    # 地心坐标
-    x_p = earth_radius * np.cos(φ) * np.cos(θ)
-    y_p = earth_radius * np.cos(φ) * np.sin(θ)
-    z_p = earth_radius * np.sin(φ)
-
-    # 倾角旋转
-    x = x_p*np.cos(tilt) + z_p*np.sin(tilt)
-    y = y_p
-    z = -x_p*np.sin(tilt) + z_p*np.cos(tilt)
-
-    # 加上地心位置
-    X = sun_distance + x
-    Y = y
-    Z = z
-
+    R_x=sun_distance*np.cos(theta)
+    R_y=sun_distance*np.sin(theta)
+    R_z=0
+    
     return np.array([X, Y, Z])
 
 
 for h in [0,6,12,18]:
-    pos = reference_point_position(40, h*3600)
+    pos = reference_point_position(40, 60 ,h*3600)
     print(
         f"{h:2d}h  "
         f"X={pos[0]:.0f}  "
