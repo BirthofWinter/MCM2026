@@ -76,22 +76,4 @@ def solar_incidence_angle(
 
     return beta
 
-hours=[0,6,12,18,24,30,36,42,48]
-seconds=[1800,1860,1920,1980]
-days=[10,30,60,90,180,270]
-
-for s in seconds:
-    angle = solar_incidence_angle(0, 0, s)
-    print(f"{s}seconds → 入射角 = {angle:.2f}°")
-    
-
-for h in hours:
-    angle = solar_incidence_angle(0, 0, h*3600)
-    print(f"{h}hours → 入射角 = {angle:.2f}°")
-    
-    
-for d in days:
-    angle = solar_incidence_angle(0, 0, d*24*3600)
-    print(f"{d}days → 入射角 = {angle:.2f}°")
-    
     
