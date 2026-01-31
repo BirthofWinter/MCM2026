@@ -34,6 +34,8 @@ def generate_daily_variation(lat, lon, start_day, days, time_step):
 
     for t in range(start_t, end_t, time_step):
         beta = solar_geometry.solar_incidence_angle(lat, lon, t)
+        if(beta >90):
+            beta=90
 
         rows.append([
             t,
@@ -79,15 +81,23 @@ def generate_latitude_comparison(day, hour):
         header=["latitude", "incidence_angle"],
         rows=rows
     )
+    
+
 
 
     # 连续两天：赤道 & 高纬
 generate_daily_variation(lat=0,  lon=0, start_day=180, days=2, time_step=300)
 generate_daily_variation(lat=80, lon=0, start_day=180, days=2, time_step=300)
 
+generate_daily_variation(lat=5, lon=0, start_day=0, days=365, time_step=600)
+
     # 一年变化：正午
 generate_yearly_at_fixed_time(lat=0,  lon=0, hour=12)
 generate_yearly_at_fixed_time(lat=0,  lon=0, hour=24)
+generate_yearly_at_fixed_time(lat=0,  lon=0, hour=8)
+generate_yearly_at_fixed_time(lat=0,  lon=0, hour=14)
+generate_yearly_at_fixed_time(lat=23,  lon=0, hour=14)
+generate_yearly_at_fixed_time(lat=23,  lon=0, hour=0)
 generate_yearly_at_fixed_time(lat=80, lon=0, hour=12)
 generate_yearly_at_fixed_time(lat=80,  lon=0, hour=24)
 
