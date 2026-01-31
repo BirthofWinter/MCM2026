@@ -55,10 +55,12 @@ class BuildingConfig:
 # 2. 太阳模组
 # ==========================================
 
+import solar_geometry # 导入新的高精度物理模型
+
 class SolarModel:
-    """计算太阳位置"""
+    """计算太阳位置 (使用 solar_geometry 中的开普勒轨道模型)"""
     def __init__(self, lat_deg, lon_deg=0):
-        self.lat_rad = np.radians(lat_deg)
+        self.lat_deg = lat_deg 
         self.lon_deg = lon_deg
         
     def get_position(self, day_of_year: int, hour_of_day_utc: float):
@@ -66,32 +68,11 @@ class SolarModel:
         计算太阳高度角(elevation)和方位角(azimuth)
         return: theta1 (elevation, rad), theta2 (azimuth, rad, South=0)
         """
-        # 计算当地太阳时 (Local Solar Time)
-        # 简单近似: LST = UTC + Lon/15
-        lst = hour_of_day_utc + self.lon_deg / 15.0
-        
-        # 规范化到 0-24
-        lst = lst % 24
-        
-        # 赤纬角 delta
-        declination = 23.45 * np.sin(np.radians(360/365 * (284 + day_of_year)))
-        delta = np.radians(declination)
-        
-        # 时角 h (正南为0, 上午负, 下午正)
-        # Local Solar Noon = 12.0
-        hour_angle = (lst - 12) * 15
-        h = np.radians(hour_angle)
-        
-        # 高度角 theta1 (Elevation)
-        sin_elev = (np.sin(self.lat_rad) * np.sin(delta) + 
-                    np.cos(self.lat_rad) * np.cos(delta) * np.cos(h))
-        theta1 = np.arcsin(np.clip(sin_elev, -1, 1))
-        
-        # 方位角 theta2 (Azimuth)
-        # 简化假设：theta2 跟随 hour_angle
-        theta2 = h 
-        
-        return max(0.0, theta1), theta2
+        # 直接调用 solar_geometry 中的高精度计算函数
+        theta1, theta2 = solar_geometry.get_solar_position(
+            day_of_year, hour_of_day_utc, self.lat_deg, self.lon_deg
+        )
+        return theta1, theta2
 
 # ==========================================
 # 3. 遮阳策略 (核心需求：不同遮阳类型)
