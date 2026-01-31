@@ -54,7 +54,7 @@ def plot_solstice_comparison(day_str, title_label, filename):
     # 绘制气温 (T2m) - 次坐标轴
     ax2 = ax1.twinx()
     line3, = ax2.plot(hours, sg_day['T2m'], color='red', linestyle='--', lw=2, label='Singapore Temp')
-    line4, = ax2.plot(hours, no_day['T2m'], color='blue', linestyle='--', lw=2, label='Oslo Temp')
+    line4, = ax2.plot(hours, no_day['T2m'], color='blue', linestyle='--', lw=2, label='Norway Temp')
     
     ax2.set_ylabel('Air Temperature $[^\circ C]$', fontsize=12, fontweight='bold')
     ax2.set_ylim(-20, 45)
