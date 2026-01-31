@@ -7,7 +7,7 @@ import os
 
 # Ensure we can import calculate
 current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(current_dir)
+sys.path.append(os.path.join(current_dir, '..'))
 
 from calculate import BuildingConfig, OverhangStats, VerticalFins, NoShading, ThermalSystem
 
@@ -39,7 +39,7 @@ def load_weather_robust(filepath):
 
 def run_sungrove_enhanced():
     print("\n--- Running Sungrove Enhanced Retrofit Analysis ---")
-    weather_file = r'd:\Desktop\美赛\代码\data\weather\singapore_data.csv'
+    weather_file = os.path.join(current_dir, '..', '..', 'data', 'weather', 'singapore_data.csv')
     weather_df = load_weather_robust(weather_file)
     if weather_df.empty: return
 
@@ -86,7 +86,7 @@ def run_sungrove_enhanced():
     print(f"Sungrove Savings: {100*(annual_std-annual_deep)/annual_std:.1f}%")
     
     # Plotting
-    output_dir = r'd:\Desktop\美赛\代码\data\model_images'
+    output_dir = os.path.join(current_dir, '..', '..', 'data', 'model_images', 'academic_halls')
     
     # Bar Chart with Dual y-axis or grouped bar for Peak vs Annual
     fig, ax1 = plt.subplots(figsize=(10, 6))
@@ -123,7 +123,7 @@ def run_sungrove_enhanced():
 
 def run_borealis_strategy():
     print("\n--- Running Borealis Passive Heating Analysis ---")
-    weather_file = r'd:\Desktop\美赛\代码\data\weather\norway_data.csv'
+    weather_file = os.path.join(current_dir, '..', '..', 'data', 'weather', 'norway_data.csv')
     weather_df = load_weather_robust(weather_file)
     if weather_df.empty: return
 
@@ -177,7 +177,7 @@ def run_borealis_strategy():
     chunk_light = res_light.iloc[start_idx:end_idx]
     chunk_heavy = res_heavy.iloc[start_idx:end_idx]
     
-    output_dir = r'd:\Desktop\美赛\代码\data\model_images'
+    output_dir = os.path.join(current_dir, '..', '..', 'data', 'model_images', 'academic_halls')
     
     plt.figure(figsize=(10, 6))
     plt.plot(chunk_light['time'], chunk_light['T_in'], label='Lightweight (Low Mass)', linestyle='--')

@@ -6,7 +6,7 @@ import os
 
 # Ensure we can import calculate
 current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(current_dir)
+sys.path.append(os.path.join(current_dir, '..'))
 
 from calculate import BuildingConfig, OverhangStats, NoShading, ThermalSystem
 
@@ -127,7 +127,7 @@ def run_optimization(location_name, weather_file, lat, is_hot_climate):
     plt.legend()
     plt.grid(True)
     
-    output_dir = r'd:\Desktop\美赛\代码\data\model_images'
+    output_dir = os.path.join(current_dir, '..', '..', 'data', 'model_images', 'academic_halls')
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
         
@@ -178,8 +178,8 @@ def run_optimization(location_name, weather_file, lat, is_hot_climate):
 
 if __name__ == "__main__":
     # 配置路径
-    singapore_file = r'd:\Desktop\美赛\代码\data\weather\singapore_data.csv'
-    norway_file = r'd:\Desktop\美赛\代码\data\weather\norway_data.csv'
+    singapore_file = os.path.join(current_dir, '..', '..', 'data', 'weather', 'singapore_data.csv')
+    norway_file = os.path.join(current_dir, '..', '..', 'data', 'weather', 'norway_data.csv')
     
     # 1. Sungrove (Singapore, Lat ~1.35, Lon ~103.8)
     # 假设 PVGIS 时间是 UTC，新加坡是 UTC+8

@@ -204,8 +204,7 @@ class ThermalSystem:
         # 限制最大步长为 300s (5分钟)，保证平滑度
         self.dt = min(300, int(limit_dt * 0.95)) 
         # 确保至少非零
-        self.dt = max(1, self.dt)
-        print(f"DEBUG: dx={self.dx:.4f}, dt={self.dt}, limit_dt={limit_dt:.1f}, Bi_max={Bi_max:.2f}") 
+        self.dt = max(1, self.dt) 
         
     def step(self, t_current, weather_row):
         """执行一个时间步长的模拟"""

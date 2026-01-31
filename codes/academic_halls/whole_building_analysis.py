@@ -7,7 +7,7 @@ import os
 
 # Ensure we can import calculate
 current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(current_dir)
+sys.path.append(os.path.join(current_dir, '..'))
 
 from calculate import BuildingConfig, OverhangStats, VerticalFins, NoShading, ThermalSystem
 
@@ -40,7 +40,7 @@ def load_weather_robust(filepath):
 
 def run_whole_building_simulation():
     print("--- Running Whole Building Simulation for Academic Hall North (Sungrove) ---")
-    weather_file = r'd:\Desktop\美赛\代码\data\weather\singapore_data.csv'
+    weather_file = os.path.join(current_dir, '..', '..', 'data', 'weather', 'singapore_data.csv')
     weather_df = load_weather_robust(weather_file)
     if weather_df.empty:
         print("Weather loading failed.")
@@ -141,7 +141,7 @@ def run_whole_building_simulation():
         heatmap_data.append(day_172[['Hour', 'Facade', 'F_shade', 'Solar_Flux']])
 
     # --- 3. Analysis & Plotting ---
-    output_dir = r'd:\Desktop\美赛\代码\data\model_images'
+    output_dir = os.path.join(current_dir, '..', '..', 'data', 'model_images', 'academic_halls')
     if not os.path.exists(output_dir): os.makedirs(output_dir)
 
     # Aggregate Total Building Load
