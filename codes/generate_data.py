@@ -70,7 +70,7 @@ def generate_latitude_comparison(day, hour):
     rows = []
     t = day * SECONDS_PER_DAY + hour * 3600
 
-    for lat in range(0, 91, 5):
+    for lat in range(0, 91, 1):
         beta = solar_geometry.solar_incidence_angle(lat, 0, t)
         rows.append([lat, beta])
 
@@ -87,7 +87,9 @@ generate_daily_variation(lat=80, lon=0, start_day=180, days=2, time_step=300)
 
     # 一年变化：正午
 generate_yearly_at_fixed_time(lat=0,  lon=0, hour=12)
+generate_yearly_at_fixed_time(lat=0,  lon=0, hour=24)
 generate_yearly_at_fixed_time(lat=80, lon=0, hour=12)
+generate_yearly_at_fixed_time(lat=80,  lon=0, hour=24)
 
     # 纬度比较：夏至正午
 generate_latitude_comparison(day=180, hour=12)
