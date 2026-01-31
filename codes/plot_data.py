@@ -314,19 +314,30 @@ def plot_latitude_interval_statistics(day, hour):
 plot_daily_variation(lat=0,  start_day=180)
 plot_daily_variation(lat=80, start_day=180)
 
+plot_daily_variation(lat=5, start_day=0)
+
 plot_daily_histogram(lat=0,  start_day=180)
 plot_daily_histogram(lat=80, start_day=180)
 
+plot_daily_histogram(lat=5, start_day=0)
+
 
 plot_yearly_variation(lat=0,  hour=12)
+plot_yearly_variation(lat=0,  hour=8)
+plot_yearly_variation(lat=0,  hour=14)
+plot_yearly_variation(lat=23,  hour=14)
 plot_yearly_variation(lat=0,  hour=24)
 plot_yearly_variation(lat=80, hour=12)
 plot_yearly_variation(lat=80,  hour=24)
 
 plot_yearly_histogram(lat=0,  hour=12)
+plot_yearly_histogram(lat=0,  hour=8)
+plot_yearly_histogram(lat=23,  hour=14)
+plot_yearly_histogram(lat=23,  hour=0)
 plot_yearly_histogram(lat=80, hour=12)
 plot_yearly_histogram(lat=0,  hour=24)
 plot_yearly_histogram(lat=80, hour=24)
+plot_yearly_histogram(lat=0,  hour=14)
 
 plot_latitude_comparison(day=180, hour=12)
 plot_latitude_interval_statistics(day=180, hour=12)
