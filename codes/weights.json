@@ -1,0 +1,16 @@
+{
+    "w_comfort_dev": 1.0,
+    "w_temp_var": 0.5,
+    "w_energy": 0.0001,
+    "w_cost": 0.01,
+    "w_light_quality": 0.1,
+  
+    "target_temp_min": 20.0,
+    "target_temp_max": 26.0,
+  
+    "scale_temp": 1.0,
+    "scale_energy": 1000000.0,
+    "scale_cost": 1000.0,
+    "scale_light": 100000.0
+  }
+  
