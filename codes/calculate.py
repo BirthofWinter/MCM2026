@@ -10,31 +10,37 @@ from abc import ABC, abstractmethod
 @dataclass
 class BuildingConfig:
     """建筑物理参数配置"""
-    # 房间热容
-    C_in: float      # [J/K] 室内空气及家具的总热容
-    Q_internal: float # [W] 内部热源功率 (人、设备等)
+    # 几何参数 (用于光照和热容归一化)
+    module_width: float = 4.0   # [m] 模拟模块宽度
+    room_depth: float = 8.0     # [m] 房间深度
+    room_height: float = 3.5    # [m] 房间层高
     
-    # 墙体参数 (PDE用)
-    layer_thickness: float # [m] 墙体总厚度 (D)
-    wall_area: float       # [m^2] 墙体总面积 (S, 包含窗户)
-    window_ratio: float    # [-] 窗墙比 (eta)
+    # 基础热工属性
+    Q_internal: float = 500.0   # [W] 内部发热量 (人员+设备)
+    window_ratio: float = 0.4   # [-] 窗墙比 (WWR)
     
-    # 材料属性
-    k_wall: float    # [W/(m*K)] 墙体导热系数
-    rho_wall: float  # [kg/m^3] 墙体密度
-    c_wall: float    # [J/(kg*K)] 墙体比热容
+    # 墙体材料属性
+    layer_thickness: float = 0.3 # [m] 墙体厚度
+    k_wall: float = 0.8         # [W/mK] 导热系数 (Concrete)
+    rho_wall: float = 1800.0    # [kg/m3] 密度
+    c_wall: float = 1000.0      # [J/kgK] 比热容
     
-    # 表面换热系数
-    h_in: float      # [W/(m^2*K)] 内表面对流换热系数
-    h_out: float     # [W/(m^2*K)] 外表面对流换热系数
+    # 对流系数
+    h_in: float = 8.0           # [W/m2K] 内表面对流
+    h_out: float = 20.0         # [W/m2K] 外表面对流
+    
+    # 派生属性将基于以上参数计算
     
     # 窗户属性
-    u_window: float  # [W/(m^2*K)] 窗户传热系数 (U-value)
-    tau_window: float # [-] 窗户太阳能透射率 (SHGC approx)
+    u_window: float = 2.8 # [W/(m^2*K)] 窗户传热系数 (U-value)
+    tau_window: float = 0.75 # [-] 窗户太阳能总透射率 (SHGC approx, 用于热)
+    tau_visible: float = 0.6 # [-] 窗户可见光透射率 (VLT, 用于光)
     
     # 新增：通风属性
     ventilation_rate: float = 1.0 # [ACH] 每小时换气次数 Air Changes per Hour
-    room_volume: float = 150.0 # [m^3] 房间体积，用于计算通风热损失
+    
+    # 光照计算属性
+    c_room_light: float = 0.5 # [-] 室内光反射系数 (Light Coefficient) - 调低一点，考虑深处衰减
 
     # 高级策略开关
     night_cooling: bool = False # 是否开启夜间通风
@@ -43,6 +49,21 @@ class BuildingConfig:
     # 辐射吸收系数
     k_const_absorb: float = 0.6 # [-] Give default value to fix valid parameter order
     
+    @property
+    def wall_area(self):
+        """外墙总面积 (模块)"""
+        return self.module_width * self.room_height
+
+    @property
+    def floor_area(self):
+        """地板面积 (模块)"""
+        return self.module_width * self.room_depth
+
+    @property
+    def room_volume(self):
+        """房间体积 (模块)"""
+        return self.floor_area * self.room_height
+        
     @property
     def window_area(self):
         return self.wall_area * self.window_ratio
@@ -158,8 +179,12 @@ class ThermalSystem:
         self.shade = shading
         self.solar = SolarModel(location_lat, location_lon)
         
+        # 初始地板面积
+        if self.cfg.floor_area <= 0:
+            self.cfg.floor_area = self.cfg.room_volume / 3.0
+
         # PDE 网格初始化
-        self.N_nodes = 10 # 恢复到 10 层，提高精度
+        self.N_nodes = 10
         self.dx = self.cfg.layer_thickness / self.N_nodes
         self.alpha = self.cfg.k_wall / (self.cfg.rho_wall * self.cfg.c_wall)
         
@@ -182,11 +207,20 @@ class ThermalSystem:
         
         limit_dt = min(limit_dt_internal, limit_dt_boundary)
         
-        # 限制最大步长为 300s (5分钟)，保证平滑度
-        self.dt = min(300, int(limit_dt * 0.95)) 
+        # 限制最大步长为 1800s (30分钟)，加快计算速度
+        self.dt = min(1800, int(limit_dt * 0.95)) 
         # 确保至少非零
         self.dt = max(1, self.dt) 
         
+        # 自动计算 C_in (Internal Thermal Mass)
+        # Air
+        c_air = 1.225 * 1005 * self.cfg.room_volume
+        # Mass (Floor + Ceiling = 2 * FloorArea)
+        # Concrete: 2000 kg/m3 * 880 J/kgK
+        # Effective depth 0.05m participating in daily swing
+        c_mass = 2 * self.cfg.floor_area * 0.05 * 2000 * 880
+        self.C_in = c_air + c_mass
+
     def step(self, t_current, weather_row):
         """执行一个时间步长的模拟"""
         T_out = weather_row['T2m']
@@ -208,8 +242,51 @@ class ThermalSystem:
         # 如果 I_input = I0 * sin(theta1) (水平面), 则 I_term = I_input * cos(theta2 - gamma)
         solar_flux_base = I_horizontal_beam * cos_rel_az 
         
+        # 光照度计算 (Illuminance) - 单位 Lux
+        # I_vis0 (Lux) approx Solar_Flux (W/m2) * Luminous Efficacy (lm/W)
+        # 太阳直射光效约 105 lm/W
+        EFFICACY = 105.0 
+        I_vis0 = abs(solar_flux_base) * EFFICACY
+        
+        # Formula: Ein = Ivis0 * (eta * S / Afloor) * tau_vis * (1 - Fshade) * Croom
+        # Note: solar_flux_base already includes cos(theta2 - gamma) * sin(theta1) implicitly via I_horiz * cos_rel / sin_elev?
+        # Check: I_horizontal = I0 * sin(elev). I_vertical_surface = I0 * cos(inc_angle).
+        # solar_flux_base definition above: I_horizontal_beam * cos_rel_az
+        # Actually, Calculate logic above is simplified. I_horizontal_beam is usually I_beam_normal * sin(theta1).
+        # So I_beam_normal = I_horizontal_beam / sin(theta1).
+        # Flux on wall = I_beam_normal * cos(incident_angle).
+        # Incident angle approx: cos(inc) = cos(elev)*cos(rel_az).
+        # So Flux = (I_horiz / sin_elev) * cos_elev * cos_rel_az = I_horiz * cot_elev * cos_rel_az.
+        # But previous logic was: solar_flux_base = I_horizontal_beam * cos_rel_az. This is approximate for low elevation, high error for high elevation.
+        # Let's fix flux base calculation first for better physics if possible, assuming I_horizontal_beam is Gb(i).
+        
+        # Better Flux Approximation:
+        # I0 in formulas.md corresponds to DNI (Direct Normal Irradiance)
+        # Avoid div by zero for DNI estimate
+        sin_e_safe = max(0.05, np.sin(theta1))
+        # Direct Normal Irradiance (DNI) ~ I_horizontal / sin(elevation)
+        I0 = I_horizontal_beam / sin_e_safe
+        
+        # Wall Incidence Cosine (Vertical Surface)
+        # cos(theta_inc) = cos(theta1) * cos(theta2 - gamma)
+        # Matches formula: I0 * cos(theta1) * cos(theta2 - gamma)
+        cos_inc = np.cos(theta1) * cos_rel_az
+        
+        solar_flux_on_wall = I0 * max(0, cos_inc)
+        
+        # Illuminance
+        # E_in = I_vis0 * cos(theta1) * cos(theta2 - gamma) * ...
+        I_vis0 = I0 * EFFICACY
+        I_vis_wall = I_vis0 * max(0, cos_inc)
+        
+        E_in = I_vis_wall * (self.cfg.window_area / self.cfg.floor_area) * self.cfg.tau_visible * (1.0 - f_shade) * self.cfg.c_room_light
+        
+        # 覆盖旧的 solar_flux_base 以获得更准确的热计算
+        solar_flux_base = solar_flux_on_wall
+
         # PDE 墙体导热
         q_rad_wall = self.cfg.k_const_absorb * solar_flux_base
+
         flux_out = self.cfg.h_out * (T_out + q_rad_wall - self.T_wall[0])
         flux_in = self.cfg.h_in * (self.T_wall[self.N_nodes] - self.T_in)
         
@@ -250,7 +327,7 @@ class ThermalSystem:
         Q_vent = m_dot_cp * (T_out - self.T_in)
         
         dQ = self.cfg.Q_internal + Q_sol + Q_win + Q_wall + Q_vent
-        dT_in = (dQ / self.cfg.C_in) * self.dt
+        dT_in = (dQ / self.C_in) * self.dt
         
         self.T_in += dT_in
         
@@ -261,10 +338,14 @@ class ThermalSystem:
             'T_wall_outer': self.T_wall[0],
             'T_wall_inner': self.T_wall[-1],
             'Solar_Flux': solar_flux_base,
+            'Illuminance': E_in,
             'F_shade': f_shade,
             'Q_sol_gain': Q_sol,
-            'Q_heating_load': max(0, 20.0 - self.T_in) * self.cfg.C_in / 3600.0 if self.T_in < 20 else 0,
-            'Q_cooling_load': max(0, self.T_in - 26.0) * self.cfg.C_in / 3600.0 if self.T_in > 26 else 0
+            'Q_wall_gain': Q_wall,
+            'Q_vent_loss': Q_vent,
+            'Q_internal': self.cfg.Q_internal,
+            'Q_heating_load': max(0, 20.0 - self.T_in) * self.C_in / 3600.0 if self.T_in < 20 else 0,
+            'Q_cooling_load': max(0, self.T_in - 26.0) * self.C_in / 3600.0 if self.T_in > 26 else 0
         }
 
     def simulate(self, weather_df):

@@ -1,22 +1,23 @@
 # 一般公式
-$$ C_{in}\frac{dT_{in}}{dt} = Q_{in} + I_{0}\sin(\theta_1)\cos(\theta_2 - \gamma)(\eta S) \tau (1 - F_{shade}) + u_w(\eta S)(T_{out} - T_{in}) + h_{in}(1 - \eta) S (T_{w}(D, t) - T_{in}) $$
+$$ C_{in}\frac{dT_{in}}{dt} = Q_{in} + Q_{vent} + I_{0}\cos(\theta_1)\cos(\theta_2 - \gamma)(\eta S) \tau (1 - F_{shade}) + u_w(\eta S)(T_{out} - T_{in}) + h_{in}(1 - \eta) S (T_{w}(D, t) - T_{in}) $$
 
 **参数说明：**
 
-| 符号        | 含义           |
-| :---------- | :------------- |
-| $C_{in}$    | 比热           |
-| $Q_{in}$    | 内部热量       |
-| $I_0$       | 光强           |
-| $\theta_1$  | 高度角         |
-| $\theta_2$  | 方位角         |
-| $\gamma$    | 窗户方位角     |
-| $\eta$      | 窗墙比         |
-| $S$         | 墙面积         |
-| $\tau$      | 窗户太阳透射率 |
-| $F_{shade}$ | 遮挡比         |
-| $u_w$       | 窗户传热系数   |
-| $h_{in}$    | 热阻           |
+| 符号        | 含义                        |
+| :---------- | :-------------------------- |
+| $C_{in}$    | 室内热容 (J/K)              |
+| $Q_{in}$    | 内部发热量 (W)              |
+| $Q_{vent}$  | 通风换热量 (W)              |
+| $I_0$       | 太阳法向直射辐射 DNI (W/m²) |
+| $\theta_1$  | 太阳高度角 (Elevation)      |
+| $\theta_2$  | 方位角                      |
+| $\gamma$    | 窗户方位角                  |
+| $\eta$      | 窗墙比                      |
+| $S$         | 墙面积                      |
+| $\tau$      | 窗户太阳透射率              |
+| $F_{shade}$ | 遮挡比                      |
+| $u_w$       | 窗户传热系数                |
+| $h_{in}$    | 热阻                        |
 
 # 补充公式
 $$ \rho_{w}c_{w}\frac{\partial T_{w}}{\partial t} = k\frac{\partial^2 T_{w}}{\partial x^2}, x\in[0, D] $$
@@ -25,20 +26,24 @@ $$ \rho_{w}c_{w}\frac{\partial T_{w}}{\partial t} = k\frac{\partial^2 T_{w}}{\pa
 
 $$
 \begin{cases}
--k\frac{\partial T}{\partial x}\bigg|_{x=0} = h_{out}(T_{out} + k_{const}I_{0}\sin(\theta_1)\cos(\theta_2 - \gamma) - T_w(0, t)) \\
+-k\frac{\partial T}{\partial x}\bigg|_{x=0} = h_{out}(T_{out} + k_{const}I_{0}\cos(\theta_1)\cos(\theta_2 - \gamma) - T_w(0, t)) \\
 -k\frac{\partial T}{\partial x}\bigg|_{x=D} = h_{in}(T_w(D, t) - T_{in}(t))
 \end{cases}
 $$
 
 **参数说明：**
 
-| 符号        | 含义                                                        |
-| :---------- | :---------------------------------------------------------- |
-| $T_w(D, t)$ | 墙体内表面温度                                              |
-| $\rho$      | 密度                                                        |
-| $c$         | 比热                                                        |
-| $k$         | 导热系数（公式中的第一个 $k$）                              |
-| $k_{const}$ | 常系数（公式中的第二个 $k$，此处记为 $k_{const}$ 以示区别） |
+| 符号        | 含义                             |
+| :---------- | :------------------------------- |
+| $T_w(D, t)$ | 墙体内表面温度                   |
+| $\rho$      | 密度                             |
+| $c$         | 比热                             |
+| $k$         | 导热系数（公式中的第一个 $k$）   |
+| $k_{const}$ | 表面吸收系数 (Absorptivity, 0-1) |
+
+$$ 
+E_{in}(t) = I_{vis0}\cos(\theta_1)\cos(\theta_2 - \gamma) \frac{\eta S}{A_{floor}} \tau_{vis} (1 - F_{shade}) C_{room}
+$$
 
 # 变量与建筑策略映射 (Variable-Strategy Mapping)
 
@@ -54,3 +59,24 @@ $$
 | **③ 墙体传导**                       | **$k$**<br>(微分方程)         | **导热系数**   | **增加保温层**<br>- 岩棉、聚苯板外保温                                                                          | 降低 $k$<br>增加热阻，使外部热/冷难以穿透墙体。                                              |
 | **系统热惯性**                       | **$C_{in}$**                  | **室内热容**   | **利用热质量 (Thermal Mass)**<br>- 暴露混凝土楼板、砖石内墙<br>- 避免轻质隔墙                                   | 增大 $C_{in}$<br>减小 $dT_{in}/dt$（温度变化率），平抑波动，实现“移峰填谷”。                 |
 | **及新增项 $Q_{vent}$**              | **$T_{in}, T_{out}$**         | **通风换热**   | **夜间通风 (Night Flushing)**<br>- 夜间自动开启高窗<br>- 利用烟囱效应                                           | 在夜间引入 $T_{out}$ 较低的空气，带走 $C_{in}$ 中蓄积的热量。                                |
+
+# 照度公式 (Illuminance)
+
+$$ 
+E_{in}(t) = I_{vis0}\cos(\theta_1)\cos(\theta_2 - \gamma) \frac{\eta S}{A_{floor}} \tau_{vis} (1 - F_{shade}) C_{room}
+$$
+
+**参数说明：**
+
+| 符号         | 含义                                                                                                   | 备注                                         |
+| :----------- | :----------------------------------------------------------------------------------------------------- | :------------------------------------------- |
+| $E_{in}(t)$  | 室内照度 (Illuminance)                                                                                 | 单位：Lux (流明/平方米)                      |
+| $I_{vis0}$   | 外部可见法向直射光强 (DNI Illuminance)                                                                 | 取决于太阳辐射强度与光效                     |
+| $\tau_{vis}$ | 窗户可见光透射率 (Visible Transmittance)                                                               | 与太阳能总透射率 $\tau$ 区分，通常更高       |
+| $A_{floor}$  | 房间地板面积                                                                                           | 对应计算区域的受光面积                       |
+| $C_{room}$   | 室内反射与分布系数 (Room Coefficient)                                                                  | 考虑内墙反射对平均照度的贡献，通常 > 1       |
+| **约束条件** | **Sungrove (赤道/热带)**: 上限约束 (Upper Limit) <br> **Borealis (极地/寒带)**: 下限约束 (Lower Limit) | 防止眩光 (Glare) <br> 保证采光 (Daylighting) |
+
+**约束具体值参考：**
+*   **上限 (Max E)**: > 2000 Lux 可能导致眩光不适 (Sungrove需控制)。
+*   **下限 (Min E)**: < 300 Lux 需开启人工照明 (Borealis需保证)。
