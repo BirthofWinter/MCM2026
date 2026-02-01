@@ -364,7 +364,7 @@ class ThermalSystem:
              times = pd.date_range(start='2023-01-01', periods=len(weather_df), freq='H')
 
         for idx in range(len(weather_df)):
-            t_curr = times[idx]
+            t_curr = times.iloc[idx]
             row = weather_df.iloc[idx]
             
             # 一个小时的数据，但我们要跑很多个 dt 步长
