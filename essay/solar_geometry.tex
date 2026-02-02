@@ -1,0 +1,49 @@
+\subsubsection{太阳-地球运转模型：高度角与方位角的计算}
+对于地球上的任意一点，我们可以得到其纬度$\varphi$ 与经度 $\lambda$，而地轴与黄道面偏移的角度（黄赤交角）记为$\varepsilon$，用$r$表示地球半径，那么此时由地心方向向外指出的向量  
+\begin{equation}
+    \vec{r}=r\left(\cos\lambda\cos\varphi\cos\varepsilon+\sin\varphi\sin\varepsilon,\;
+    \sin\lambda\cos\varphi,\;
+    -\cos\lambda\cos\varphi\sin\varepsilon+\sin\varphi\cos\varepsilon\right)
+\end{equation}
+纬线沿切线方向指出的方向向量为
+\begin{equation}
+    \vec{r}_{\text{纬}}=\left(-\cos\varepsilon\sin\lambda,\;
+    \cos\lambda,\;
+    \sin\varepsilon\sin\lambda\right)
+\end{equation}
+
+在地球沿椭圆轨道公转时，若将公转轨道转过的转角记为$\theta$，结合地日距离$R$可得到太阳光照射到地球表面方向的向量
+\begin{equation}
+    \vec{R}=R\left(\cos\theta,\;\sin\theta,\;0\right)
+\end{equation}
+
+对于上式中的$\theta$，可根据开普勒方程
+\begin{equation}
+    M = E - e\sin E
+\end{equation}
+并结合运行过程中的几何关系得到具体的$\theta$与$R$之间的关系方程组
+\begin{equation}
+\lambda = \lambda_0 + \frac{T_{\text{orb}}}{T_{\text{rot}}}\,(k-e\sin k)
+\end{equation}
+\begin{equation}
+R = a\,(1-e\cos k)
+\end{equation}
+\begin{equation}
+t = \frac{T_{\text{orb}}}{2\pi}\,(k-e\sin k)
+\end{equation}
+
+而$\theta$本身可根据万有引力公式得到
+\begin{equation}
+\int_0^\theta\frac{d\theta'}{(1+e\cos\theta')^2}= \frac{\sqrt{GM}}{a^{3/2}\,(1-e^2)^{3/2}}\;t
+\end{equation}
+
+由以上式子可得到最终的方位角$\theta_1$与高度角$\theta_2$计算公式
+\begin{equation}
+\cos\theta_1 = \frac{-\vec{r}\cdot\left(\vec{r}+\vec{R}\right)}
+{|\vec{r}|\cdot|\vec{r}+\vec{R}|}
+\end{equation}
+\begin{equation}
+\sin\theta_2 = \frac{\vec{r}_{\text{纬}}\cdot\left(\vec{r}+\vec{R}\right)}
+{|\vec{r}_{\text{纬}}|\cdot|\vec{r}+\vec{R}|}
+\end{equation}
+
