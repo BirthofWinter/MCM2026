@@ -16,12 +16,9 @@ from calculate import BuildingConfig, ThermalSystem, OverhangStats, VerticalFins
 
 
 # -------------------------
-# IO helpers (copied/compatible with your old ml_precompute.py)
+# IO helpers
 # -------------------------
 def load_weather_robust(filepath: str) -> pd.DataFrame:
-    """
-    Compatible with PVGIS csv. Header starts from 'time'.
-    """
     header_row = 0
     with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
         for i, line in enumerate(f):
@@ -69,7 +66,6 @@ def load_weights(weights_json_path: str) -> OptimizationWeights:
 
 
 def build_base_config() -> BuildingConfig:
-    # keep exactly the same defaults as your old script
     return BuildingConfig(
         module_width=4.0,
         room_depth=8.0,
@@ -110,7 +106,7 @@ def parse_list_arg(s: str, cast_fn=str):
 
 
 def make_shading(shading_type: str, win_h: float, win_w: float, azimuth: float,
-                overhang_depth: float, fin_depth: float):
+                 overhang_depth: float, fin_depth: float):
     if shading_type == "Overhang":
         return OverhangStats(win_h, win_w, azimuth, depth_L=float(overhang_depth))
     if shading_type == "Fins":
@@ -119,12 +115,6 @@ def make_shading(shading_type: str, win_h: float, win_w: float, azimuth: float,
 
 
 def estimate_joint_cost(po: ParameterOptimizer, shading_type: str, overhang_depth: float, fin_depth: float, facade_area: float):
-    """
-    Use the same cost model already inside ParameterOptimizer:
-    - Overhang: cost(overhang_depth)
-    - Fins: cost(fin_depth)
-    - NoShading: 0
-    """
     if shading_type == "Overhang":
         return float(po.estimate_cost("overhang_depth", float(overhang_depth), facade_area))
     if shading_type == "Fins":
@@ -139,18 +129,22 @@ def main():
     parser.add_argument("--weights", required=True, help="weights.json path")
     parser.add_argument("--out", default="dataset_joint.csv", help="output csv")
 
-    # NEW: joint sampling controls
+    # joint sampling controls
     parser.add_argument("--n_samples", type=int, default=5000, help="number of joint samples to generate")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--hours", type=int, default=720, help="simulate first N hours for speed (default 720=30 days)")
 
-    # design space constraints (your confirmed choices)
+    # decision space constraints
     parser.add_argument("--shading_types", default="Overhang,Fins,NoShading", help="allowed shading types")
     parser.add_argument("--azimuths", default="0,90,180,270", help="allowed FacadeAzimuth values (deg)")
     parser.add_argument("--overhang_min", type=float, default=0.0)
     parser.add_argument("--overhang_max", type=float, default=3.0)
     parser.add_argument("--fin_min", type=float, default=0.0)
     parser.add_argument("--fin_max", type=float, default=3.0)
+
+    # NEW: window-to-wall ratio (WWR) as sampled variable (decision variable later)
+    parser.add_argument("--wwr_min", type=float, default=0.15)
+    parser.add_argument("--wwr_max", type=float, default=0.65)
 
     args = parser.parse_args()
 
@@ -165,8 +159,7 @@ def main():
     weights = load_weights(args.weights)
     base_cfg = build_base_config()
 
-    # reuse evaluator + cost logic from your framework
-    # ParameterOptimizer already constructs MetricEvaluator internally, but we want clean access.
+    # Cost model uses ParameterOptimizer; keep a base optimizer instance (cost only depends on depth here)
     po = ParameterOptimizer(base_config=base_cfg, weather_df=weather_df, location_lat=args.lat, weights=weights)
     evaluator = MetricEvaluator(weights)
 
@@ -175,20 +168,23 @@ def main():
     shading_types = parse_list_arg(args.shading_types, str)
     azimuths = parse_list_arg(args.azimuths, float)
 
-    # Use the same window dimensions as your sweep code
     win_h, win_w = 2.0, 1.5
+    facade_area_for_cost = 420.0
 
     rows = []
-    facade_area_for_cost = 420.0  # keep consistent with your old run_sweep() cost call
-
     for i in range(args.n_samples):
+        # ---- sample decision variables ----
         shading_type = rng.choice(shading_types)
         azimuth = float(rng.choice(azimuths))
 
         overhang_depth = float(rng.uniform(args.overhang_min, args.overhang_max))
         fin_depth = float(rng.uniform(args.fin_min, args.fin_max))
 
-        # Optional: make unused depth = 0 for interpretability
+        # NEW: sample window_ratio and actually apply it to simulation config
+        wwr = float(rng.uniform(args.wwr_min, args.wwr_max))
+        cfg = replace(base_cfg, window_ratio=wwr)
+
+        # structural constraint for interpretability
         if shading_type == "Overhang":
             fin_depth = 0.0
         elif shading_type == "Fins":
@@ -198,18 +194,18 @@ def main():
             fin_depth = 0.0
 
         shade = make_shading(shading_type, win_h, win_w, azimuth, overhang_depth, fin_depth)
-        system = ThermalSystem(base_cfg, shade, location_lat=args.lat)
 
+        # IMPORTANT: use cfg (with sampled window_ratio) here
+        system = ThermalSystem(cfg, shade, location_lat=args.lat)
         res_df = system.simulate(weather_df)
 
         cost = estimate_joint_cost(po, shading_type, overhang_depth, fin_depth, facade_area_for_cost)
         metrics = evaluator.evaluate(res_df, cost)
 
-        # Build a single sample row
         row = {}
         row.update(metrics)
 
-        # decision vars
+        # decision vars in dataset
         row["ShadingType"] = shading_type
         row["FacadeAzimuth"] = azimuth
         row["overhang_depth"] = overhang_depth
@@ -219,8 +215,8 @@ def main():
         row["Latitude"] = args.lat
         row["WeatherFile"] = os.path.basename(args.weather)
 
-        # include building config as scenario columns (so ml_optimize_rf can condition on them)
-        cfg_dict = asdict(base_cfg)
+        # include building config as scenario columns (BUT now varies by sample because cfg varies)
+        cfg_dict = asdict(cfg)
         for k, v in cfg_dict.items():
             row[f"Cfg_{k}"] = v
 
@@ -235,10 +231,14 @@ def main():
 
     out_df = pd.DataFrame(rows)
 
-    # Recommend putting target first
     front_cols = ["Total_Score", "Discomfort_Avg", "Temp_Std", "Total_Energy_MJ", "Strategy_Cost", "Raw_Total_Solar_MJ"]
     cols = front_cols + [c for c in out_df.columns if c not in front_cols]
     out_df = out_df[cols]
+
+    # ensure output directory exists
+    out_dir = os.path.dirname(args.out)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
 
     out_df.to_csv(args.out, index=False, encoding="utf-8-sig")
     print(f"[OK] Saved joint dataset: {args.out} | rows={len(out_df)}")

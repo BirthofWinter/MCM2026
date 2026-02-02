@@ -1,4 +1,3 @@
-# ml_optimize_rf.py  (核心改版：条件优化，只搜索设计变量)
 import argparse
 import os
 import json
@@ -15,23 +14,13 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
 
 
-
 def json_default(o):
-    # numpy / pandas 标量 -> Python 标量
     if isinstance(o, (np.integer, np.floating, np.bool_)):
         return o.item()
-    # pandas Timestamp / numpy datetime -> string
     if isinstance(o, (pd.Timestamp, np.datetime64)):
         return str(o)
-    # 兜底：最后转字符串（避免再炸）
     return str(o)
 
-# ---------------------------
-# Utilities
-# ---------------------------
-
-def pick_existing_cols(df, candidates):
-    return [c for c in candidates if c in df.columns]
 
 def detect_target(df):
     for name in ["Total_Score", "total_score", "score", "TotalScore"]:
@@ -39,22 +28,18 @@ def detect_target(df):
             return name
     raise ValueError("Cannot find target column. Expected one of: Total_Score / total_score / score / TotalScore")
 
+
 def build_model(model_type="rf", random_state=42):
     if model_type == "dt":
-        reg = DecisionTreeRegressor(
-            max_depth=12,
-            min_samples_leaf=5,
-            random_state=random_state
-        )
-    else:
-        reg = RandomForestRegressor(
-            n_estimators=400,
-            max_depth=None,
-            min_samples_leaf=3,
-            random_state=random_state,
-            n_jobs=-1
-        )
-    return reg
+        return DecisionTreeRegressor(max_depth=12, min_samples_leaf=5, random_state=random_state)
+    return RandomForestRegressor(
+        n_estimators=400,
+        max_depth=None,
+        min_samples_leaf=3,
+        random_state=random_state,
+        n_jobs=-1
+    )
+
 
 def make_pipeline(numeric_cols, cat_cols, model):
     pre = ColumnTransformer(
@@ -64,11 +49,8 @@ def make_pipeline(numeric_cols, cat_cols, model):
         ],
         remainder="drop"
     )
-    pipe = Pipeline([
-        ("pre", pre),
-        ("model", model)
-    ])
-    return pipe
+    return Pipeline([("pre", pre), ("model", model)])
+
 
 def get_feature_importance(pipe, numeric_cols, cat_cols):
     model = pipe.named_steps["model"]
@@ -79,25 +61,27 @@ def get_feature_importance(pipe, numeric_cols, cat_cols):
     feature_names = []
     for name, trans, cols in pre.transformers_:
         if name == "cat":
-            ohe_names = trans.get_feature_names_out(cols).tolist()
-            feature_names.extend(ohe_names)
+            feature_names.extend(trans.get_feature_names_out(cols).tolist())
         elif name == "num":
             feature_names.extend(cols)
 
     imp = model.feature_importances_
-    imp_df = pd.DataFrame({"feature": feature_names, "importance": imp})
-    return imp_df.sort_values("importance", ascending=False).reset_index(drop=True)
+    return pd.DataFrame({"feature": feature_names, "importance": imp}).sort_values("importance", ascending=False).reset_index(drop=True)
+
 
 def sample_design_candidates(n_samples, seed, shading_types,
-                             overhang_range=(0.0, 3.0), fin_range=(0.0, 3.0)):
+                             overhang_range=(0.0, 3.0), fin_range=(0.0, 3.0),
+                             wwr_range=(0.15, 0.65)):
     rng = np.random.default_rng(seed)
     cand = pd.DataFrame({
         "overhang_depth": rng.uniform(overhang_range[0], overhang_range[1], size=n_samples),
         "fin_depth": rng.uniform(fin_range[0], fin_range[1], size=n_samples),
         "ShadingType": rng.choice(shading_types, size=n_samples, replace=True),
+        # NEW: decision variable
+        "Cfg_window_ratio": rng.uniform(wwr_range[0], wwr_range[1], size=n_samples),
     })
 
-    # 结构约束：不同遮阳类型只激活对应深度
+    # structural constraint: only the relevant depth is active
     mask_overhang = cand["ShadingType"] == "Overhang"
     mask_fins = cand["ShadingType"] == "Fins"
     mask_none = cand["ShadingType"] == "NoShading"
@@ -108,7 +92,6 @@ def sample_design_candidates(n_samples, seed, shading_types,
     return cand
 
 
-
 def scenario_key_to_name(scenario_cols, key):
     if not scenario_cols:
         return "ALL"
@@ -117,47 +100,61 @@ def scenario_key_to_name(scenario_cols, key):
     return "_".join([f"{scenario_cols[i]}={key[i]}" for i in range(len(scenario_cols))])
 
 
-# ---------------------------
-# Main
-# ---------------------------
+def parse_int_list(s: str):
+    return [int(x.strip()) for x in s.split(",") if x.strip()]
+
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True, help="CSV dataset path")
-    ap.add_argument("--model", choices=["rf", "dt"], default="rf", help="rf=RandomForest, dt=DecisionTree")
+    ap.add_argument("--model", choices=["rf", "dt"], default="rf")
 
-    # 你指定：情景 = 自然因素 + 房屋内部参数（都固定），设计变量只优化遮阳相关
     ap.add_argument("--scenario_cols", default="", help="comma-separated scenario columns; blank=ALL")
-    ap.add_argument("--min_rows", type=int, default=80, help="minimum rows per scenario to report a best")
+    ap.add_argument("--min_rows", type=int, default=80)
 
     ap.add_argument("--test_size", type=float, default=0.2)
     ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--search_samples", type=int, default=50000, help="how many candidates sampled in design-space search")
-    ap.add_argument("--out_dir", default="ml_results", help="output directory")
+    ap.add_argument("--search_samples", type=int, default=50000)
+    ap.add_argument("--out_dir", default="ml_results")
 
-    # 设计空间约束（按你刚刚确认的）
-    ap.add_argument("--azimuths", default="0,90,180,270", help="allowed FacadeAzimuth values, comma-separated")
+    # decision space
     ap.add_argument("--overhang_min", type=float, default=0.0)
     ap.add_argument("--overhang_max", type=float, default=3.0)
     ap.add_argument("--fin_min", type=float, default=0.0)
     ap.add_argument("--fin_max", type=float, default=3.0)
-    ap.add_argument("--shading_types", default="", help="allowed ShadingType values; blank=use values from data")
+    ap.add_argument("--wwr_min", type=float, default=0.15)
+    ap.add_argument("--wwr_max", type=float, default=0.65)
+
+    ap.add_argument("--shading_types", default="Overhang,Fins,NoShading", help="allowed ShadingType values")
+    # optional: restrict azimuth scenarios (e.g., only south/north)
+    ap.add_argument("--az_filter", default="", help="comma-separated azimuth values to keep in data, e.g. '0,180'")
 
     args = ap.parse_args()
 
     df = pd.read_csv(args.data)
     target = detect_target(df)
 
+    # Optional filter to only run specific azimuth scenarios
+    if args.az_filter.strip() and "FacadeAzimuth" in df.columns:
+        keep = set(parse_int_list(args.az_filter))
+        df = df[df["FacadeAzimuth"].astype(int).isin(keep)].copy()
+
     # scenario cols
     scenario_cols = []
     if args.scenario_cols.strip():
         scenario_cols = [c.strip() for c in args.scenario_cols.split(",") if c.strip() in df.columns]
 
-    # 设计变量（固定为你要优化的四个）
-    design_num = [c for c in ["overhang_depth", "fin_depth", "FacadeAzimuth"] if c in df.columns]
+    # ----------------------------
+    # Decision variables:
+    #   - overhang_depth, fin_depth, ShadingType
+    #   - Cfg_window_ratio   (NEW)
+    #
+    # FacadeAzimuth is scenario, NOT a decision variable.
+    # ----------------------------
+    design_num = [c for c in ["overhang_depth", "fin_depth", "Cfg_window_ratio"] if c in df.columns]
     design_cat = [c for c in ["ShadingType"] if c in df.columns]
 
-    # 情景变量：你指定的 scenario_cols
+    # scenario variables (from scenario_cols)
     scenario_num = []
     scenario_cat = []
     for c in scenario_cols:
@@ -166,14 +163,13 @@ def main():
         else:
             scenario_cat.append(c)
 
-    # 全局训练特征 = 情景变量 + 设计变量
+    # training features = scenario vars + decision vars
     numeric_cols = sorted(list(set(scenario_num + design_num)))
     cat_cols = sorted(list(set(scenario_cat + design_cat)))
 
     X = df[numeric_cols + cat_cols].copy()
     y = df[target].astype(float).copy()
 
-    # train/test
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=args.test_size, random_state=args.seed
     )
@@ -188,35 +184,23 @@ def main():
 
     os.makedirs(args.out_dir, exist_ok=True)
 
-    # feature importances (global)
     imp_df = get_feature_importance(pipe, numeric_cols, cat_cols)
     if imp_df is not None:
-        imp_path = os.path.join(args.out_dir, "feature_importances.csv")
-        imp_df.to_csv(imp_path, index=False, encoding="utf-8-sig")
+        imp_df.to_csv(os.path.join(args.out_dir, "feature_importances.csv"), index=False, encoding="utf-8-sig")
 
-    # 设计空间取值
-    azimuths = [int(x.strip()) for x in args.azimuths.split(",") if x.strip()]
-    if args.shading_types.strip():
-        shading_types = [s.strip() for s in args.shading_types.split(",") if s.strip()]
-    else:
-        shading_types = df["ShadingType"].dropna().unique().tolist() if "ShadingType" in df.columns else ["Overhang", "Fins", "NoShading"]
-        # 兜底：若数据里没有这三种，仍然允许它们
-        for s in ["Overhang", "Fins", "NoShading"]:
-            if s not in shading_types:
-                shading_types.append(s)
+    shading_types = [s.strip() for s in args.shading_types.split(",") if s.strip()]
 
-    # 需要输出的 scenario 列表
     if scenario_cols:
         groups = list(df.groupby(scenario_cols, dropna=False))
     else:
         groups = [(("ALL",), df)]
         scenario_cols = []
 
-    summary_rows = []
-
     print("Target:", target)
     print("Scenario cols:", scenario_cols if scenario_cols else "(none, ALL)")
     print(f"Global model: {args.model} | MAE={mae:.4f} R2={r2:.3f}")
+
+    summary_rows = []
 
     for key, g in groups:
         if isinstance(key, (int, float, str)):
@@ -225,30 +209,30 @@ def main():
         if len(g) < args.min_rows:
             continue
 
-        # 固定情景：取该 scenario 的第一行（因为 group by 后情景列一致）
+        # fixed scenario (first row)
         scenario_fixed = {}
         for c in scenario_cols:
             scenario_fixed[c] = g.iloc[0][c]
 
-        # 1) Observed best：真实数据里见过的最优
+        # observed best from actual simulations
         best_obs_idx = g[target].astype(float).idxmin()
         best_obs = g.loc[best_obs_idx, :]
 
-        # 2) Predicted best：固定情景 + 搜索设计变量
+        # model-based search over decision variables
         cand_design = sample_design_candidates(
             n_samples=args.search_samples,
             seed=args.seed,
             shading_types=shading_types,
             overhang_range=(args.overhang_min, args.overhang_max),
             fin_range=(args.fin_min, args.fin_max),
+            wwr_range=(args.wwr_min, args.wwr_max),
         )
 
-        # 拼接成模型输入：每个候选都带上同一套 scenario_fixed
+        # attach scenario_fixed to all candidates
         cand = cand_design.copy()
         for c, v in scenario_fixed.items():
             cand[c] = v
 
-        # 对齐列
         cand_X = cand[numeric_cols + cat_cols].copy()
         cand_pred = pipe.predict(cand_X)
         best_pred_i = int(np.argmin(cand_pred))
@@ -256,11 +240,8 @@ def main():
         best_pred_score = float(cand_pred[best_pred_i])
 
         scenario_name = scenario_key_to_name(scenario_cols, key)
-
-        # shorten filename: hash of scenario_name
         h = hashlib.md5(scenario_name.encode("utf-8")).hexdigest()[:10]
         out_json = os.path.join(args.out_dir, f"best_{h}.json")
-
 
         payload = {
             "scenario_cols": scenario_cols,
@@ -270,7 +251,8 @@ def main():
             "global_metrics": {"MAE": mae, "R2": r2},
             "observed_best": {
                 "Total_Score": float(best_obs[target]),
-                "params": {k: (best_obs[k].item() if hasattr(best_obs[k], "item") else best_obs[k]) for k in (design_num + design_cat) if k in best_obs.index},
+                "params": {k: (best_obs[k].item() if hasattr(best_obs[k], "item") else best_obs[k])
+                           for k in (design_num + design_cat) if k in best_obs.index},
             },
             "predicted_best": {
                 "Pred_Total_Score": best_pred_score,
@@ -278,11 +260,10 @@ def main():
             },
             "scenario_fixed": scenario_fixed
         }
+
         with open(out_json, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2, default=json_default)
 
-
-        # 汇总
         row_sum = {c: key[i] for i, c in enumerate(scenario_cols)}
         row_sum.update({
             "rows": len(g),
@@ -290,9 +271,9 @@ def main():
             "Global_R2": r2,
             "ObservedBest_TotalScore": float(best_obs[target]),
             "PredBest_PredTotalScore": best_pred_score,
+            "PredBest_Cfg_window_ratio": best_pred_row.get("Cfg_window_ratio", None),
             "PredBest_overhang_depth": best_pred_row.get("overhang_depth", None),
             "PredBest_fin_depth": best_pred_row.get("fin_depth", None),
-            "PredBest_FacadeAzimuth": best_pred_row.get("FacadeAzimuth", None),
             "PredBest_ShadingType": best_pred_row.get("ShadingType", None),
         })
         summary_rows.append(row_sum)
