@@ -203,31 +203,70 @@ def run_sungrove_optimization():
 
     # --- D. 创新图表绘制 ---
     
-    # 1. 优化地形等高线图 (Contour Plot) - 替代原有的 Heatmap
+    # 1. 优化地形等高线图 (Contour Plot) - 需转换为"越高越好"的得分
     plt.figure(figsize=(10, 8))
-    pivot_table = df_res.pivot(index='Overhang', columns='WWR', values='Score')
+    
+    # 将原始 Penalty Score 转换为归一化的 Performance Score (0-1)
+    # Score_new = 1 - (Score_old - min) / (max - min)
+    # 这样原来的最小值 (Best) 变为 1.0，最大值 (Worst) 变为 0.0
+    
+    raw_scores = df_res['Score'].values
+    min_s, max_s = np.min(raw_scores), np.max(raw_scores)
+    # 防止除以零
+    if max_s == min_s:
+        normalized_scores = np.ones_like(raw_scores)
+    else:
+        normalized_scores = 1.0 - (raw_scores - min_s) / (max_s - min_s)
+    
+    df_res['NormScore'] = normalized_scores
+    
+    pivot_table = df_res.pivot(index='Overhang', columns='WWR', values='NormScore')
     
     # 准备网格数据
     X_grid, Y_grid = np.meshgrid(pivot_table.columns.astype(float), pivot_table.index.astype(float))
     Z_grid = pivot_table.values
     
     # 绘制填充等高线
-    # Score是惩罚分，越低越好。使用 'coolwarm' colormap，蓝色表示低分（优），红色表示高分（劣）
-    cp = plt.contourf(X_grid, Y_grid, Z_grid, levels=20, cmap='coolwarm', alpha=0.9)
+    # 现在 Score 越高越好：红色表示高分（优），蓝色表示低分（劣）
+    # 使用 'RdYlBu_r' (Red-Yellow-Blue reversed)，这样 1.0 (优) 是红色，0.0 (劣) 是蓝色
+    # 或者继续用 'coolwarm'，但我们需要 1.0 是红色/暖色。 'coolwarm' 默认低=冷(蓝)，高=暖(红)。
+    # 原来是 Penalty (低优)，为了看起来像山谷用了 coolwarm (低蓝高红)。
+    # 现在是 Score (高优)，为了看起来像山峰，使用 coolwarm (低蓝高红) 正好符合 "高=红=优"？
+    # 不，通常绿色/蓝色代表节能/舒适（优），红色代表过热/浪费（差）。
+    # 但用户要求"整个图像不变"，只改指标含义。
+    # 原图：最优解在中间（蓝色/低分），四周红色（高分/差）。
+    # 新图：最优解在中间（最高分 1.0），四周低分（0.0）。
+    # 如果要"色彩分布视觉上不变"（还是中间蓝四周红），那得反着映射。
+    # 但逻辑上，Heatmap 通常 "Hot" (Red) is High value.
+    # 让我们使用直观的逻辑：高分=优。
+    # 用户说"整个图像不变"，可能是指拓扑结构（中间最优点）。
+    # 既然变成了"高分越好"，那么中间应该是"高峰"。
+    # 我们可以用 'viridis' 或 'RdYlGn' (Red-Yellow-Green)，绿=优=高。
+    # 让我们再次确认用户需求："把这个等高线图改成越高越好......整个图像不变"。
+    # 这可能意味着颜色映射要反转，或者保持原来的颜色（中间蓝四周红）但数值变了？
+    # 通常论文里颜色：红色=Bad/Hot, 蓝色=Good/Cool。
+    # 如果原来的蓝色变成了1.0 (High Score)，红色变成了0.0 (Low Score)。
+    # 我们的 map 依然可以用 coolwarm，高值(1.0)=红，低值(0.0)=蓝。
+    # 这样就变成了中间红（优），四周蓝（差）。这跟原来的颜色反了。
+    # 为了保持原来的"中间蓝（优），四周红（差）"的视觉效果，但在数值上是"越高越好"，
+    # 我们需要一个 colormap，其中 High Value (1.0) -> Blue, Low Value (0.0) -> Red.
+    # 'RdYlBu' (Red-Yellow-Blue) : Low=Red, High=Blue. 
+    # 正好满足要求：中间是高分(1.0)显示为蓝色，四周是低分(0.0)显示为红色。
+    
+    cp = plt.contourf(X_grid, Y_grid, Z_grid, levels=20, cmap='RdYlBu', alpha=0.9)
     cbar = plt.colorbar(cp)
-    cbar.set_label('Total Penalty Score (Lower is Better)', fontsize=12)
+    cbar.set_label('Normalized Performance Score (0-1, Higher is Better)', fontsize=12)
     
     # 叠加等高线线条
     line_c = plt.contour(X_grid, Y_grid, Z_grid, levels=10, colors='black', linewidths=0.5, alpha=0.5)
-    plt.clabel(line_c, inline=True, fontsize=10, fmt='%.0f')
+    plt.clabel(line_c, inline=True, fontsize=10, fmt='%.2f')
     
-    # 标注最优点
-    min_score = np.min(Z_grid)
-    min_idx = np.unravel_index(np.argmin(Z_grid), Z_grid.shape)
-    best_overhang = pivot_table.index[min_idx[0]]
-    best_wwr = pivot_table.columns[min_idx[1]]
+    # 标注最优点 (Max Score)
+    max_idx = np.unravel_index(np.argmax(Z_grid), Z_grid.shape)
+    best_overhang = pivot_table.index[max_idx[0]]
+    best_wwr = pivot_table.columns[max_idx[1]]
     
-    # 仅保留星星标记，移除复杂的文字注释和箭头，避免视觉杂乱
+    # 仅保留星星标记
     plt.scatter([best_wwr], [best_overhang], color='lime', marker='*', s=400, edgecolors='black', label='Global Optimum', zorder=10)
     # 微调显示范围，确保边缘留白，防止星星被切掉 (如果最优解在边缘)
     plt.xlim(min(wwr_options)-0.05, max(wwr_options)+0.05)
