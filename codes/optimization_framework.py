@@ -23,7 +23,7 @@ class OptimizationWeights:
     w_temp_var: float = 0.5        # 温度波动性权重
     w_energy: float = 0.0001       # 能耗权重 (注意量级差异, Q通常很大)
     w_cost: float = 0.01           # 初始造成本权重
-    w_light_quality: float = 0.1   # 光照质量权重 (负值代表越多越好，正值代表惩罚)
+    w_light_quality: float = 0.1   # 光照质量权重 (正值=Bonus, 负值=Penalty, 现改为对数收益)
 
     # 目标设定
     target_temp_min: float = 20.0
@@ -68,27 +68,26 @@ class MetricEvaluator:
         # 累加制冷和制热负载
         total_energy = time_series_df['Q_cooling_load'].sum() + time_series_df['Q_heating_load'].sum()
         
-        # 4. 光照质量指标 (Light Quality)
-        # 简易代理：获得的太阳辐射总量 (Q_sol_gain)
-        # 假设：适量的光是好的，但该指标更关注是否"过度"导致能耗，或者是否"过少"导致需要人工照明
-        # 对于Sungrove (热带)，我们希望尽量减少得热，但保留采光。
-        # 这里简化为：总辐射量 (作为一种环境影响的度量)
+        # 4. 光照质量指标 (Light Quality / Daylight Utility)
+        # 引入对数效用函数：Logarithmic Utility of Daylight
+        # 边际效应递减：第一缕阳光最宝贵，后面逐渐饱和。
+        # 而热负荷是线性的。两者的叠加会自然产生一个最优的中间值。
         total_solar_gain = time_series_df['Q_sol_gain'].sum()
+        # 使用 log10 压缩量级，+1 避免 log(0)
+        # Q_sol_gain 单位通常是 W，一小时累积是 J。数量级可能很大 (1e8 J)。
+        # total_solar_gain / scale_light (1e5) -> ~1000 量级
+        normalized_flux = total_solar_gain / self.w.scale_light
+        daylight_utility = np.log1p(max(0, normalized_flux)) 
         
         # 计算归一化得分 (Score, 越低越好)
-        # Score = Cost function to minimize
+        # Score = Cost + Discomfort - Light_Utility
         
         score = (
             self.w.w_comfort_dev * (avg_discomfort / self.w.scale_temp) +
             self.w.w_temp_var * (temp_std / self.w.scale_temp) +
             self.w.w_energy * (total_energy / self.w.scale_energy) +
-            self.w.w_cost * (strategy_cost / self.w.scale_cost) - 
-            self.w.w_light_quality * (total_solar_gain / self.w.scale_light) # 减去光照收益? 或者加上光照过载惩罚?
-            # 修改逻辑：光照作为收益项不好量化，这里通常光照多 -> 热量多 -> 能耗高。
-            # 所以光照本身已经在能耗里体现了负面。
-            # 只有当需要"自然采光"时，光照才是收益。
-            # 让我们假设 target 是维持一定的光通量。
-            # 暂时简化：不计入独立的光照分，因为它与热强耦合，直接看能耗和舒适度即可。
+            self.w.w_cost * (strategy_cost / self.w.scale_cost) -  
+            self.w.w_light_quality * daylight_utility # 减去效用（即获得Bonus）
         )
         
         return {
