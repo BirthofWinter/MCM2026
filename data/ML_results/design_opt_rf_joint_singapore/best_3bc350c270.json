@@ -1,0 +1,86 @@
+{
+  "scenario_cols": [
+    "WeatherFile",
+    "Latitude",
+    "Cfg_window_ratio",
+    "Cfg_u_window",
+    "Cfg_tau_window",
+    "Cfg_tau_visible",
+    "Cfg_k_const_absorb",
+    "Cfg_layer_thickness",
+    "Cfg_k_wall",
+    "Cfg_rho_wall",
+    "Cfg_c_wall",
+    "Cfg_ventilation_rate",
+    "Cfg_night_cooling",
+    "Cfg_night_vent_rate",
+    "Cfg_c_room_light",
+    "Cfg_module_width",
+    "Cfg_room_depth",
+    "Cfg_room_height"
+  ],
+  "scenario_key": [
+    "singapore_data.csv",
+    1.35,
+    0.45,
+    2.8,
+    0.75,
+    0.6,
+    0.6,
+    0.3,
+    0.8,
+    1800.0,
+    1000.0,
+    2.0,
+    false,
+    5.0,
+    0.5,
+    4.0,
+    8.0,
+    3.5
+  ],
+  "rows": 5000,
+  "global_model": "rf",
+  "global_metrics": {
+    "MAE": 0.003487283782206525,
+    "R2": 0.999999960236029
+  },
+  "observed_best": {
+    "Total_Score": 5.08020545941167,
+    "params": {
+      "overhang_depth": 0.0,
+      "fin_depth": 0.0,
+      "FacadeAzimuth": 180.0,
+      "ShadingType": "NoShading"
+    }
+  },
+  "predicted_best": {
+    "Pred_Total_Score": 5.080205459411672,
+    "params": {
+      "overhang_depth": 0.3843408980266376,
+      "fin_depth": 2.5986642764937473,
+      "FacadeAzimuth": 180,
+      "ShadingType": "NoShading"
+    }
+  },
+  "scenario_fixed": {
+    "WeatherFile": "singapore_data.csv",
+    "Latitude": 1.35,
+    "Cfg_window_ratio": 0.45,
+    "Cfg_u_window": 2.8,
+    "Cfg_tau_window": 0.75,
+    "Cfg_tau_visible": 0.6,
+    "Cfg_k_const_absorb": 0.6,
+    "Cfg_layer_thickness": 0.3,
+    "Cfg_k_wall": 0.8,
+    "Cfg_rho_wall": 1800.0,
+    "Cfg_c_wall": 1000.0,
+    "Cfg_ventilation_rate": 2.0,
+    "Cfg_night_cooling": false,
+    "Cfg_night_vent_rate": 5.0,
+    "Cfg_c_room_light": 0.5,
+    "Cfg_module_width": 4.0,
+    "Cfg_room_depth": 8.0,
+    "Cfg_room_height": 3.5
+  }
+}
