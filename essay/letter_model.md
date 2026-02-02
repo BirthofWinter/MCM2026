@@ -11,3 +11,54 @@ I hope these suggestions will assist you in creating a cooler, more cost-effecti
 Wishing you a successful transformation!
 Sincerely,
 Team #2614702
+
+---
+
+## LaTeX 排版与美化指南
+
+若要实现“清凉风”背景及“飘逸艺术字”抬头，请参考以下 LaTeX 代码与步骤：
+
+1.  **准备背景图**：找一张海岛、森林或浅色植物的高清图片，重命名为 `background.jpg`，放在与 `.tex` 文件相同的文件夹中。建议稍微调高亮度或降低对比度，以免干扰文字。
+2.  **编写 LaTeX 代码**：
+
+```latex
+\documentclass[a4paper,12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\usepackage{background} % 用于设置背景
+\usepackage{calligra}   % 用于艺术字体 (Calligra 风格，看起来像手写体)
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{times}      % 正文使用 Times New Roman 风格字体
+
+% 设置页面边距
+\geometry{left=2.5cm, right=2.5cm, top=3cm, bottom=3cm}
+
+% 背景设置 (清凉风)
+\backgroundsetup{
+  scale=1,                % 缩放比例
+  angle=0,                % 旋转角度
+  opacity=0.25,           % 透明度 (0.1-0.3 比较适合做背景)
+  contents={\includegraphics[width=\paperwidth,height=\paperheight]{background.jpg}}
+}
+
+\begin{document}
+
+% 抬头：使用 Calligra 字体实现飘逸效果，\Huge 放大字号
+% 这是一个非常飘逸的手写体宏包
+\noindent {\calligra\Huge Dear Administrators,}
+
+\vspace{1cm}
+
+% 正文部分 (示例)
+Greetings! Thank you for inviting us to contribute to Sungrove University’s ambitious "Net-Zero Cooling" initiative...
+
+% ... (此处填入完整的信件内容)
+
+\vspace{2cm}
+
+Sincerely,\\
+\textbf{Team \#2614702}
+
+\end{document}
+```
