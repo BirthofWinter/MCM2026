@@ -300,6 +300,65 @@ def run_sungrove_part1():
     plt.close()
 
     # ---------------------------------------------------------
+    # 3b. Export Night Ventilation Data (CSV)
+    # ---------------------------------------------------------
+    print("Generating 3b. Night Ventilation Data CSV...")
+    
+    # Run a short simulation for Summer Solstice (Day 172)
+    start_day_sol = 172
+    
+    # Use Combined Strategy (Retrofit) which has night cooling enabled
+    sim_night = ThermalSystem(cfg_comb, strat_comb, LAT, LON)
+    res_night = sim_night.simulate(weather_df.copy())
+    
+    # Shift Time
+    res_night['time'] = res_night['time'] + pd.Timedelta(hours=TZ_OFFSET)
+    
+    # Filter for single day
+    mask_sol = (res_night['time'].dt.dayofyear == start_day_sol)
+    day_data = res_night.loc[mask_sol].copy()
+    
+    # Resample to hourly
+    day_hourly = day_data.set_index('time').resample('H').mean(numeric_only=True)
+    day_hourly['Hour'] = day_hourly.index.hour
+    
+    # Extract Ventilation Cooling (Q_vent_loss < 0 means cooling)
+    # Convert to Watts or kW? User asked for data table. W is fine, or kW.
+    # Q_vent_loss is in Watts (J/s) roughly from calculate.py logic (m_dot_cp * dT)
+    # Let's use Watts for precision or kW for readability. Let's use kW.
+    
+    # Q_vent_loss: positive = gain (hot air in), negative = loss (cooling)
+    # We want "Cooling Rate" (positive value)
+    day_hourly['Ventilation_Cooling_kW'] = -day_hourly['Q_vent_loss'].clip(upper=0) / 1000.0
+    day_hourly['Indoor_Temp_C'] = day_hourly['T_in']
+    day_hourly['Outdoor_Temp_C'] = day_hourly['T_out']
+    
+    # Select relevant columns
+    csv_cols = ['Hour', 'Indoor_Temp_C', 'Outdoor_Temp_C', 'Ventilation_Cooling_kW']
+    csv_path = os.path.join(csv_dir, 'sungrove_night_ventilation_cooling.csv')
+    day_hourly[csv_cols].to_csv(csv_path, index=False, float_format='%.2f')
+    print(f"Exported detailed night ventilation data to {csv_path}")
+
+    # Generate Summary Table for Paper
+    # Group by Period: Night (20:00-06:59) vs Day (07:00-19:59)
+    # Night cooling active hours: 20,21,22,23 and 0,1,2,3,4,5,6 (11 hours)
+    is_night = (day_hourly.index.hour < 7) | (day_hourly.index.hour >= 20)
+    day_hourly['Period'] = np.where(is_night, 'Night Cooling (Active)', 'Daytime (Passive)')
+
+    summary = day_hourly.groupby('Period').agg({
+        'Indoor_Temp_C': 'mean',
+        'Outdoor_Temp_C': 'mean',
+        'Ventilation_Cooling_kW': ['mean', 'max', 'sum'] # Sum works as kWh because index is hourly
+    }).round(2)
+    
+    # Clean up column names for final CSV
+    summary.columns = ['Avg_Indoor_Temp_C', 'Avg_Outdoor_Temp_C', 'Avg_Cooling_Rate_kW', 'Peak_Cooling_Rate_kW', 'Total_Cooling_Energy_kWh']
+    
+    summary_path = os.path.join(csv_dir, 'sungrove_night_ventilation_summary.csv')
+    summary.to_csv(summary_path)
+    print(f"Exported summary table to {summary_path}")
+
+    # ---------------------------------------------------------
     # 4. Seasonal Temperature Comparison
     # ---------------------------------------------------------
     print("Generating 4. Seasonal Temperature Comparison...")
